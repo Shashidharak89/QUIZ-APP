@@ -1,46 +1,63 @@
 "use client";
-
 import { useState } from "react";
 
 export default function HomeScreen() {
   const [videoUrl, setVideoUrl] = useState("");
-  const [subtitles, setSubtitles] = useState("");
+  const [count, setCount] = useState(5);
+  const [quiz, setQuiz] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchSubtitles = async () => {
-    if (!videoUrl.trim()) return;
-    setLoading(true);
+  const handleGenerateQuiz = async () => {
     setError("");
-    setSubtitles("");
+    setQuiz("");
+    if (!videoUrl.trim()) {
+      setError("Please enter a YouTube link.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
-      const res = await fetch("/api/getSubtitles", {
+      // 1️⃣ Get transcript from your backend
+      const transcriptRes = await fetch("/api/getSubtitles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videoUrl }),
       });
 
-      const data = await res.json();
+      const transcriptData = await transcriptRes.json();
 
-      if (data.error) setError(data.error);
-      else setSubtitles(data.subtitles);
+      if (!transcriptRes.ok || transcriptData.error) {
+        setError(transcriptData.error || "Failed to get transcript.");
+        setLoading(false);
+        return;
+      }
+
+      // 2️⃣ Send transcript to Gemini to generate quiz
+      const quizRes = await fetch("/api/generateQuiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: transcriptData.transcript, count }),
+      });
+
+      const quizData = await quizRes.json();
+
+      if (!quizRes.ok || quizData.error) {
+        setError(quizData.error || "Failed to generate quiz.");
+      } else {
+        setQuiz(quizData.quiz);
+      }
     } catch (err) {
-      setError("Error fetching subtitles.");
+      setError("Something went wrong. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const copyToClipboard = async () => {
-    if (!subtitles) return;
-    await navigator.clipboard.writeText(subtitles);
-    alert("✅ Subtitles copied to clipboard!");
-  };
-
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>🎬 YouTube Subtitle Extractor</h1>
+      <h1 style={styles.title}>🎯 YouTube Transcript Quiz Generator</h1>
 
       <div style={styles.inputContainer}>
         <input
@@ -50,20 +67,25 @@ export default function HomeScreen() {
           onChange={(e) => setVideoUrl(e.target.value)}
           style={styles.input}
         />
-        <button onClick={fetchSubtitles} style={styles.button}>
-          Get Subtitles
+        <input
+          type="number"
+          min="1"
+          max="10"
+          value={count}
+          onChange={(e) => setCount(e.target.value)}
+          style={styles.numberInput}
+        />
+        <button onClick={handleGenerateQuiz} disabled={loading} style={styles.button}>
+          {loading ? "Generating..." : "Generate Quiz"}
         </button>
       </div>
 
-      {loading && <p>Loading subtitles...</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {subtitles && (
-        <div style={styles.outputContainer}>
-          <button onClick={copyToClipboard} style={styles.copyButton}>
-            Copy Subtitles
-          </button>
-          <p style={styles.subtitles}>{subtitles}</p>
+      {quiz && (
+        <div style={styles.output}>
+          <h3>🧩 Generated Quiz</h3>
+          <pre style={styles.quiz}>{quiz}</pre>
         </div>
       )}
     </div>
@@ -72,9 +94,9 @@ export default function HomeScreen() {
 
 const styles = {
   container: {
-    fontFamily: "sans-serif",
+    fontFamily: "system-ui, sans-serif",
+    padding: "40px 16px",
     textAlign: "center",
-    padding: "40px",
   },
   title: {
     fontSize: "28px",
@@ -84,43 +106,40 @@ const styles = {
     display: "flex",
     justifyContent: "center",
     gap: "10px",
-    marginBottom: "20px",
     flexWrap: "wrap",
+    marginBottom: "20px",
   },
   input: {
-    width: "80%",
-    maxWidth: "500px",
+    width: "60%",
+    maxWidth: "400px",
+    padding: "10px",
+    borderRadius: "8px",
+    border: "1px solid #ccc",
+  },
+  numberInput: {
+    width: "80px",
     padding: "10px",
     borderRadius: "8px",
     border: "1px solid #ccc",
   },
   button: {
     backgroundColor: "#0070f3",
-    color: "#fff",
+    color: "white",
     border: "none",
     borderRadius: "8px",
     padding: "10px 15px",
     cursor: "pointer",
   },
-  outputContainer: {
+  output: {
     marginTop: "30px",
-    textAlign: "left",
     maxWidth: "700px",
     margin: "auto",
     background: "#f8f8f8",
     padding: "20px",
     borderRadius: "10px",
+    textAlign: "left",
   },
-  copyButton: {
-    backgroundColor: "#22c55e",
-    color: "#fff",
-    border: "none",
-    padding: "8px 14px",
-    borderRadius: "6px",
-    cursor: "pointer",
-    marginBottom: "15px",
-  },
-  subtitles: {
+  quiz: {
     whiteSpace: "pre-wrap",
     fontSize: "16px",
     lineHeight: "1.6",

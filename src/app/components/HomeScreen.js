@@ -15,7 +15,12 @@ export default function HomeScreen() {
     setSubtitles("");
 
     try {
-      const res = await fetch(`/api/getSubtitles?videoUrl=${encodeURIComponent(videoUrl)}`);
+      const res = await fetch("/api/getSubtitles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoUrl }),
+      });
+
       const data = await res.json();
 
       if (data.error) setError(data.error);

@@ -3,33 +3,32 @@ import { useState } from "react";
 import { Play, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import "./styles/HomeScreen.css";
 
-// QuizGenerator Component
 export default function QuizGenerator() {
   const [videoUrl, setVideoUrl] = useState("");
   const [count, setCount] = useState(5);
   const [quiz, setQuiz] = useState("");
+  const [parsedQuiz, setParsedQuiz] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleGenerateQuiz = async () => {
     setError("");
     setQuiz("");
-    
+    setParsedQuiz([]);
+
     if (!videoUrl.trim()) {
       setError("Please enter a YouTube link.");
       return;
     }
 
     setLoading(true);
-
     try {
-      // Get transcript
+      // 1. Get transcript
       const transcriptRes = await fetch("/api/getSubtitles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videoUrl }),
       });
-
       const transcriptData = await transcriptRes.json();
       if (!transcriptRes.ok || transcriptData.error) {
         setError(transcriptData.error || "Failed to get transcript.");
@@ -37,14 +36,15 @@ export default function QuizGenerator() {
         return;
       }
 
-      // Generate quiz with specific instructions
+      // 2. Generate quiz
       const quizRes = await fetch("/api/generateQuiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          transcript: transcriptData.transcript, 
+        body: JSON.stringify({
+          transcript: transcriptData.transcript,
           count,
-          instructions: "Generate multiple choice questions (MCQs) only. For each question, provide 4 options (A, B, C, D) and clearly mark the correct answer with '✓' or highlight it. Format should be clean and easy to read. and dont say like here are 5 questions, here you go anything extra just give the questions directly. in this format: Question 1: ... Option 1: A. ... B. ... C. ... D. ... Correct Answer: A ✓,... , for eg: 1. What is computer. a) an electronic device b) a creature c) a bird d) an animal ans:a this much is enought and neatly allign=ment also, and give one delimeter in that which is $$& is befor staring a question and &$$ on ending question like $$&1.what is ...a)...b)...c)...d)...ans:a&$$ got it"
+          instructions:
+            "Generate multiple choice questions (MCQs) only. Each in format $$&1. question a)...b)...c)...d)...ans:x&$$",
         }),
       });
 
@@ -53,6 +53,8 @@ export default function QuizGenerator() {
         setError(quizData.error || "Failed to generate quiz.");
       } else {
         setQuiz(quizData.quiz);
+        const parsed = parseQuizString(quizData.quiz);
+        setParsedQuiz(parsed);
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -61,13 +63,51 @@ export default function QuizGenerator() {
     }
   };
 
+  // ✅ Helper to parse quiz string
+  const parseQuizString = (quizStr) => {
+    const questionBlocks = quizStr
+      .split("$$&")
+      .filter((block) => block.trim() && block.includes("&$$"))
+      .map((block) => block.split("&$$")[0].trim());
+
+    return questionBlocks.map((qText) => {
+      const [questionLine, ...rest] = qText.split("\n").filter(Boolean);
+      const options = rest.filter((line) => /^[a-d]\)/i.test(line.trim()));
+      const answerLine = rest.find((line) => line.toLowerCase().startsWith("ans:"));
+      const correct = answerLine ? answerLine.split(":")[1].trim().toLowerCase() : "";
+
+      return {
+        question: questionLine.replace(/^\d+\./, "").trim(),
+        options,
+        correct,
+        selected: null,
+        isCorrect: null,
+      };
+    });
+  };
+
+  // ✅ Handle user selecting an answer
+  const handleSelect = (qIndex, optionLetter) => {
+    setParsedQuiz((prev) =>
+      prev.map((q, i) =>
+        i === qIndex
+          ? {
+              ...q,
+              selected: optionLetter,
+              isCorrect: q.correct === optionLetter.toLowerCase(),
+            }
+          : q
+      )
+    );
+  };
+
   return (
     <div className="app-container">
       <div className="main-content">
         <header className="header">
-          <h1 className="header-title">📹 Video Quiz Generator</h1>
+          <h1 className="header-title">🎥 Video Quiz Generator</h1>
           <p className="header-subtitle">
-            Send a video link and generate an instant quiz
+            Generate interactive quizzes directly from YouTube videos
           </p>
         </header>
 
@@ -109,9 +149,7 @@ export default function QuizGenerator() {
                     Generating Quiz...
                   </>
                 ) : (
-                  <>
-                    Generate Quiz
-                  </>
+                  <>Generate Quiz</>
                 )}
               </button>
             </div>
@@ -124,15 +162,58 @@ export default function QuizGenerator() {
             </div>
           )}
 
-          {quiz && (
-            <div className="quiz-output">
+          {/* ✅ Interactive Quiz */}
+          {parsedQuiz.length > 0 && (
+            <div className="quiz-section">
               <div className="quiz-header">
                 <CheckCircle2 size={28} />
                 <h3 className="quiz-title">Your Quiz</h3>
               </div>
-              <div className="quiz-box">
-                <pre className="quiz-content">{quiz}</pre>
-              </div>
+
+              {parsedQuiz.map((q, index) => (
+                <div key={index} className="quiz-question">
+                  <p className="question-text">
+                    {index + 1}. {q.question}
+                  </p>
+                  <div className="options-list">
+                    {q.options.map((opt, i) => {
+                      const letter = opt.trim()[0].toLowerCase();
+                      const isSelected = q.selected === letter;
+                      const isCorrect = q.isCorrect && isSelected;
+                      const isWrong = !q.isCorrect && isSelected;
+
+                      return (
+                        <button
+                          key={i}
+                          className={`option-btn ${
+                            isCorrect
+                              ? "correct"
+                              : isWrong
+                              ? "wrong"
+                              : isSelected
+                              ? "selected"
+                              : ""
+                          }`}
+                          disabled={q.selected !== null}
+                          onClick={() => handleSelect(index, letter)}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {q.selected && (
+                    <p
+                      className={`feedback ${
+                        q.isCorrect ? "text-green" : "text-red"
+                      }`}
+                    >
+                      {q.isCorrect ? "✅ Correct!" : "❌ Wrong! (Answer: " + q.correct.toUpperCase() + ")"}
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

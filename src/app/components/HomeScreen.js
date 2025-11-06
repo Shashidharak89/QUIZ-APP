@@ -44,7 +44,7 @@ export default function QuizGenerator() {
         body: JSON.stringify({ 
           transcript: transcriptData.transcript, 
           count,
-          instructions: "Generate multiple choice questions (MCQs) only. For each question, provide 4 options (A, B, C, D) and clearly mark the correct answer with '✓' or highlight it. Format should be clean and easy to read. and dont say like here are 5 questions, here you go anything extra just give the questions directly. in this format: Question 1: ... Option 1: A. ... B. ... C. ... D. ... Correct Answer: A ✓,... , for eg: 1. What is computer. a) an electronic device b) a creature c) a bird d) an animal ans:a this much is enought and neatly allign=ment also, and give one delimeter in that which is $$& is befor staring a question and &$$ on ending question like $$&1."
+          instructions: "Generate multiple choice questions (MCQs) only. For each question, provide 4 options (A, B, C, D) and clearly mark the correct answer with '✓' or highlight it. Format should be clean and easy to read. and dont say like here are 5 questions, here you go anything extra just give the questions directly. in this format: Question 1: ... Option 1: A. ... B. ... C. ... D. ... Correct Answer: A ✓,... , for eg: 1. What is computer. a) an electronic device b) a creature c) a bird d) an animal ans:a this much is enought and neatly allign=ment also, and give one delimeter in that which is $$& is befor staring a question and &$$ on ending question like $$&1.what is ...a)...b)...c)...d)...ans:a&$$ got it"
         }),
       });
 

@@ -1,7 +1,10 @@
 "use client";
 import { useState } from "react";
+import { Play, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import "./styles/HomeScreen.css";
 
-export default function HomeScreen() {
+// QuizGenerator Component
+export default function QuizGenerator() {
   const [videoUrl, setVideoUrl] = useState("");
   const [count, setCount] = useState(5);
   const [quiz, setQuiz] = useState("");
@@ -11,6 +14,7 @@ export default function HomeScreen() {
   const handleGenerateQuiz = async () => {
     setError("");
     setQuiz("");
+    
     if (!videoUrl.trim()) {
       setError("Please enter a YouTube link.");
       return;
@@ -19,7 +23,7 @@ export default function HomeScreen() {
     setLoading(true);
 
     try {
-      // 1️⃣ Get transcript from your backend
+      // Get transcript
       const transcriptRes = await fetch("/api/getSubtitles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -27,121 +31,112 @@ export default function HomeScreen() {
       });
 
       const transcriptData = await transcriptRes.json();
-
       if (!transcriptRes.ok || transcriptData.error) {
         setError(transcriptData.error || "Failed to get transcript.");
         setLoading(false);
         return;
       }
 
-      // 2️⃣ Send transcript to Gemini to generate quiz
+      // Generate quiz with specific instructions
       const quizRes = await fetch("/api/generateQuiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: transcriptData.transcript, count }),
+        body: JSON.stringify({ 
+          transcript: transcriptData.transcript, 
+          count,
+          instructions: "Generate multiple choice questions (MCQs) only. For each question, provide 4 options (A, B, C, D) and clearly mark the correct answer with '✓' or highlight it. Format should be clean and easy to read."
+        }),
       });
 
       const quizData = await quizRes.json();
-
       if (!quizRes.ok || quizData.error) {
         setError(quizData.error || "Failed to generate quiz.");
       } else {
         setQuiz(quizData.quiz);
       }
-    } catch (err) {
-      setError("Something went wrong. Try again.");
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>🎯 YouTube Transcript Quiz Generator</h1>
+    <div className="app-container">
+      <div className="main-content">
+        <header className="header">
+          <h1 className="header-title">📹 Video Quiz Generator</h1>
+          <p className="header-subtitle">
+            Send a video link and generate an instant quiz
+          </p>
+        </header>
 
-      <div style={styles.inputContainer}>
-        <input
-          type="text"
-          placeholder="Paste YouTube link..."
-          value={videoUrl}
-          onChange={(e) => setVideoUrl(e.target.value)}
-          style={styles.input}
-        />
-        <input
-          type="number"
-          min="1"
-          max="10"
-          value={count}
-          onChange={(e) => setCount(e.target.value)}
-          style={styles.numberInput}
-        />
-        <button onClick={handleGenerateQuiz} disabled={loading} style={styles.button}>
-          {loading ? "Generating..." : "Generate Quiz"}
-        </button>
-      </div>
+        <div className="card">
+          <div className="input-section">
+            <label className="input-label">YouTube Video URL</label>
+            <div className="input-wrapper">
+              <Play className="input-icon" size={20} />
+              <input
+                type="text"
+                placeholder="https://youtube.com/watch?v=..."
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                className="input-field"
+              />
+            </div>
 
-      {error && <p style={{ color: "red" }}>{error}</p>}
+            <div className="controls-row">
+              <div className="count-wrapper">
+                <label className="input-label">Questions</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={count}
+                  onChange={(e) => setCount(parseInt(e.target.value) || 1)}
+                  className="count-input"
+                />
+              </div>
 
-      {quiz && (
-        <div style={styles.output}>
-          <h3>🧩 Generated Quiz</h3>
-          <pre style={styles.quiz}>{quiz}</pre>
+              <button
+                onClick={handleGenerateQuiz}
+                disabled={loading}
+                className="generate-btn"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="loading-spinner" size={20} />
+                    Generating Quiz...
+                  </>
+                ) : (
+                  <>
+                    Generate Quiz
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="alert alert-error">
+              <XCircle size={20} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {quiz && (
+            <div className="quiz-output">
+              <div className="quiz-header">
+                <CheckCircle2 size={28} />
+                <h3 className="quiz-title">Your Quiz</h3>
+              </div>
+              <div className="quiz-box">
+                <pre className="quiz-content">{quiz}</pre>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    fontFamily: "system-ui, sans-serif",
-    padding: "40px 16px",
-    textAlign: "center",
-  },
-  title: {
-    fontSize: "28px",
-    marginBottom: "20px",
-  },
-  inputContainer: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "10px",
-    flexWrap: "wrap",
-    marginBottom: "20px",
-  },
-  input: {
-    width: "60%",
-    maxWidth: "400px",
-    padding: "10px",
-    borderRadius: "8px",
-    border: "1px solid #ccc",
-  },
-  numberInput: {
-    width: "80px",
-    padding: "10px",
-    borderRadius: "8px",
-    border: "1px solid #ccc",
-  },
-  button: {
-    backgroundColor: "#0070f3",
-    color: "white",
-    border: "none",
-    borderRadius: "8px",
-    padding: "10px 15px",
-    cursor: "pointer",
-  },
-  output: {
-    marginTop: "30px",
-    maxWidth: "700px",
-    margin: "auto",
-    background: "#f8f8f8",
-    padding: "20px",
-    borderRadius: "10px",
-    textAlign: "left",
-  },
-  quiz: {
-    whiteSpace: "pre-wrap",
-    fontSize: "16px",
-    lineHeight: "1.6",
-  },
-};

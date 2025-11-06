@@ -17,67 +17,100 @@ export default function QuizGenerator() {
     setParsedQuiz([]);
 
     if (!videoUrl.trim()) {
-      setError("Please enter a YouTube link.");
+      setError("⚠️ Please enter a valid YouTube link before generating the quiz.");
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Get transcript
+      // STEP 1: Get transcript
       const transcriptRes = await fetch("/api/getSubtitles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videoUrl }),
       });
+
       const transcriptData = await transcriptRes.json();
       if (!transcriptRes.ok || transcriptData.error) {
-        setError(transcriptData.error || "Failed to get transcript.");
+        setError(transcriptData.error || "Failed to fetch subtitles. Please check your video link.");
         setLoading(false);
         return;
       }
 
-      // 2. Generate quiz
+      // STEP 2: Generate quiz
       const quizRes = await fetch("/api/generateQuiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transcript: transcriptData.transcript,
           count,
-          instructions:
-            "Generate multiple choice questions (MCQs) only. Each in format $$&1. question a)...b)...c)...d)...ans:x&$$",
+          instructions: `
+Generate exactly ${count} multiple-choice questions (MCQs) based on the given transcript. 
+Each question must strictly follow the format below.
+
+⚠️ DO NOT include explanations, introductions, or anything outside the delimiters. ⚠️
+
+### Format:
+Each question block must start with "$$&" and end with "&$$".
+Inside, use this structure:
+
+$$&
+1. <question text>
+a) <option A>
+b) <option B>
+c) <option C>
+d) <option D>
+ans:<correct option letter>
+&$$
+
+✅ Rules:
+- Use lowercase letters (a,b,c,d) for options.
+- Use 'ans:<letter>' for correct answer (no extra text).
+- Number questions sequentially.
+- Provide only the questions in the above format, nothing else.
+
+[delimeter is a thing so we can understand this is the beginning and end of each question block, thats why you must use it exactly as shown]
+`,
         }),
       });
 
       const quizData = await quizRes.json();
       if (!quizRes.ok || quizData.error) {
-        setError(quizData.error || "Failed to generate quiz.");
+        setError(quizData.error || "Failed to generate quiz. Try again.");
       } else {
-        setQuiz(quizData.quiz);
-        const parsed = parseQuizString(quizData.quiz);
-        setParsedQuiz(parsed);
+        const rawQuiz = quizData.quiz || "";
+        setQuiz(rawQuiz);
+
+        // ✅ If delimiters exist, parse them
+        if (rawQuiz.includes("$$&") && rawQuiz.includes("&$$")) {
+          setParsedQuiz(parseQuizString(rawQuiz));
+        } else {
+          setParsedQuiz([]); // No delimiters, show plain quiz
+        }
       }
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (e) {
+      setError("Unexpected error. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Helper to parse quiz string
+  // 🧠 Parse quiz string based on delimiters
   const parseQuizString = (quizStr) => {
-    const questionBlocks = quizStr
+    const blocks = quizStr
       .split("$$&")
       .filter((block) => block.trim() && block.includes("&$$"))
       .map((block) => block.split("&$$")[0].trim());
 
-    return questionBlocks.map((qText) => {
-      const [questionLine, ...rest] = qText.split("\n").filter(Boolean);
-      const options = rest.filter((line) => /^[a-d]\)/i.test(line.trim()));
-      const answerLine = rest.find((line) => line.toLowerCase().startsWith("ans:"));
+    return blocks.map((text) => {
+      const lines = text.split("\n").filter(Boolean);
+      const questionLine = lines[0] || "";
+      const options = lines.filter((l) => /^[a-d]\)/i.test(l.trim()));
+      const answerLine = lines.find((l) => l.toLowerCase().startsWith("ans:"));
       const correct = answerLine ? answerLine.split(":")[1].trim().toLowerCase() : "";
 
       return {
-        question: questionLine.replace(/^\d+\./, "").trim(),
+        question: questionLine.replace(/^\d+\.\s*/, "").trim(),
         options,
         correct,
         selected: null,
@@ -86,15 +119,15 @@ export default function QuizGenerator() {
     });
   };
 
-  // ✅ Handle user selecting an answer
-  const handleSelect = (qIndex, optionLetter) => {
+  // 🧩 Handle user selecting an option
+  const handleSelect = (qIndex, optLetter) => {
     setParsedQuiz((prev) =>
       prev.map((q, i) =>
         i === qIndex
           ? {
               ...q,
-              selected: optionLetter,
-              isCorrect: q.correct === optionLetter.toLowerCase(),
+              selected: optLetter,
+              isCorrect: q.correct === optLetter.toLowerCase(),
             }
           : q
       )
@@ -107,7 +140,7 @@ export default function QuizGenerator() {
         <header className="header">
           <h1 className="header-title">🎥 Video Quiz Generator</h1>
           <p className="header-subtitle">
-            Generate interactive quizzes directly from YouTube videos
+            Generate interactive quizzes instantly from YouTube videos.
           </p>
         </header>
 
@@ -162,8 +195,8 @@ export default function QuizGenerator() {
             </div>
           )}
 
-          {/* ✅ Interactive Quiz */}
-          {parsedQuiz.length > 0 && (
+          {/* ✅ Display quiz */}
+          {parsedQuiz.length > 0 ? (
             <div className="quiz-section">
               <div className="quiz-header">
                 <CheckCircle2 size={28} />
@@ -175,6 +208,7 @@ export default function QuizGenerator() {
                   <p className="question-text">
                     {index + 1}. {q.question}
                   </p>
+
                   <div className="options-list">
                     {q.options.map((opt, i) => {
                       const letter = opt.trim()[0].toLowerCase();
@@ -209,12 +243,26 @@ export default function QuizGenerator() {
                         q.isCorrect ? "text-green" : "text-red"
                       }`}
                     >
-                      {q.isCorrect ? "✅ Correct!" : "❌ Wrong! (Answer: " + q.correct.toUpperCase() + ")"}
+                      {q.isCorrect
+                        ? "✅ Correct!"
+                        : `❌ Wrong! (Answer: ${q.correct.toUpperCase()})`}
                     </p>
                   )}
                 </div>
               ))}
             </div>
+          ) : (
+            quiz && (
+              <div className="quiz-output">
+                <div className="quiz-header">
+                  <CheckCircle2 size={28} />
+                  <h3 className="quiz-title">Your Quiz</h3>
+                </div>
+                <div className="quiz-box">
+                  <pre className="quiz-content">{quiz}</pre>
+                </div>
+              </div>
+            )
           )}
         </div>
       </div>
